@@ -90,8 +90,12 @@ class StockAnalysisAgent(BaseAgent):
     def _gather_news_data(self, symbol: str) -> List[NewsArticle]:
         """Gather and process news data"""
         news = self.news_tool.get_stock_news(symbol, max_articles=20)
-        sentiment = self.news_tool.analyze_sentiment(news)
-        return {'articles': news, 'sentiment': sentiment}
+
+        news_text = [article.title for article in news] 
+        news_text = " ".join(news_text)
+        
+        sentiment = self.news_tool.analyze_sentiment(news_text)
+        return {'articles': news_text, 'sentiment': sentiment}
 
     def _analyze_stock(
         self,

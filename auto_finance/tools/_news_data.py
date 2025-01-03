@@ -3,6 +3,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
+from urllib.parse import urlencode
 
 class NewsArticle(BaseModel):
     title: str
@@ -10,14 +11,45 @@ class NewsArticle(BaseModel):
     time: str
     source: str
     url: Optional[str] = None
+    current_price: Optional[float] = None
 
 class NewsDataTool:
     """Tool for fetching and processing financial news data"""
     
+    API_KEY = "fIpWmHOoNrHz_syKnRyDVYkzvKtQmup9"
+
+    @staticmethod
+    def get_current_price(symbol: str) -> float:
+        """
+        Fetch the current price of the stock using Polygon.io API.
+        
+        Args:
+            symbol: Stock ticker symbol
+            
+        Returns:
+            Current stock price as a float
+        """
+        try:
+            base_url = "https://api.polygon.io/v2/last/trade"
+            url = f"{base_url}/{symbol}?apiKey={NewsDataTool.API_KEY}"
+            response = requests.get(url)
+            response.raise_for_status()  # Raise exception for bad HTTP responses
+            data = response.json()
+            
+            # Extract the price from the response
+            if "results" in data and "p" in data["results"]:
+                return data["results"]["p"]  # 'p' stands for the price
+            else:
+                print("Price data not found.")
+                return -1.0
+        except Exception as e:
+            print(f"Error fetching current price for {symbol}: {e}")
+            return -1.0
+
     @staticmethod
     def get_stock_news(
         symbol: str,
-        max_articles: int = 5,
+        max_articles: int = 10,
         days_back: int = 7
     ) -> List[NewsArticle]:
         """
@@ -31,47 +63,51 @@ class NewsDataTool:
         Returns:
             List of NewsArticle objects
         """
-        url = f"https://finviz.com/quote.ashx?t={symbol}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+        # Calculate the start date based on days_back
+        today = datetime.date.today()
+        start_date = today - datetime.timedelta(days=days_back)
+
+        # Prepare API endpoint
+        base_url = "https://api.polygon.io/v2/reference/news"
+        params = {
+            "ticker": symbol,
+            "limit": max_articles,
+            "published_utc.gte": start_date.isoformat(),
+            "apiKey": NewsDataTool.API_KEY,
         }
+        url = f"{base_url}?{urlencode(params)}"
         
         try:
-            response = requests.get(url, headers=headers)
-            print("response", response)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            attrs = soup.attrs()
-            print("attrs: ")
-            print(attrs)
-            news_table = soup.find(id='news-table')
-            print("news_table: ", news_table)
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad HTTP responses
+            data = response.json()
             
+            if "results" not in data or not data["results"]:
+                print(f"No news articles found for {symbol}.")
+                return []
+            
+            current_price = NewsDataTool.get_current_price(symbol)
+            if current_price == -1.0:
+                print("Unable to fetch the current price.")
+
             news_list = []
-            for row in news_table.findAll('tr'):
-                title = row.a.text
-                date_data = row.td.text.split(' ')
-                
-                if len(date_data) == 1:
-                    time = date_data[0]
-                    date = datetime.today().strftime('%Y-%m-%d')
-                else:
-                    date = date_data[0]
-                    time = date_data[1]
-                
-                article = NewsArticle(
-                    title=title,
-                    date=date,
-                    time=time,
-                    source=row.span.text if row.span else "Unknown",
-                    url=row.a['href'] if row.a else None
+            for article in data["results"]:
+                news_article = NewsArticle(
+                    title=article.get("title", "No Title"),
+                    date=article.get("published_utc", "Unknown Date").split("T")[0],
+                    time=article.get("published_utc", "Unknown Time").split("T")[-1],
+                    source=article.get("publisher", {}).get("name", "Unknown Source"),
+                    current_price=current_price,
+                    url=article.get("article_url", None),
                 )
-                
-                news_list.append(article)
-                
+                news_list.append(news_article)
+
                 if len(news_list) >= max_articles:
                     break
-                    
+
             return news_list
+
         except Exception as e:
             print(f"Error fetching news for {symbol}: {str(e)}")
             return []

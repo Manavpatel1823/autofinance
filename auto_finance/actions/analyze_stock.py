@@ -59,6 +59,7 @@ def handle(args, cwd):
         for result in results:
             if result.success:
                 analysis = result.data
+
                 print(f"\nAnalysis Results:")
                 print("=" * 50)
                 print(f"Recommendation: {analysis['recommendation']}")

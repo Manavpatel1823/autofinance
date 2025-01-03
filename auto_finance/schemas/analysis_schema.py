@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 import json
 
 class TechnicalAnalysis(BaseModel):
@@ -125,7 +125,7 @@ class StockAnalysisResponse(BaseModel):
             cleaned_json = json.dumps(data)
             
             # Parse and validate
-            return cls.parse_raw(cleaned_json)
+            return cls.model_validate_json(cleaned_json)
         except Exception as e:
             raise ValueError(f"Failed to parse LLM response: {str(e)}")
     
